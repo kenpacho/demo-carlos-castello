@@ -2,7 +2,11 @@ package es.nextdigital.demo.servicios;
 
 public interface TarjetaServicio {
 
-    float sacarDinero(String numeroTarjeta, float cantidad, String bancoCajero);
+    float sacarDinero(String numeroTarjeta, int pin, float cantidad, String bancoCajero);
 
-    void ingresarDinero(String numeroTarjeta, float cantidad, String bancoCajero);
+    void ingresarDinero(String numeroTarjeta, int pin, float cantidad, String bancoCajero);
+
+    void activarTarjeta(String numeroTarjeta, int pin);
+
+    void cambiarPin(String numeroTarjeta, int pin, int nuevoPin);
 }

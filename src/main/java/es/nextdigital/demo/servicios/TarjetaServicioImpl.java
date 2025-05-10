@@ -8,9 +8,12 @@ import es.nextdigital.demo.model.Cuenta;
 import es.nextdigital.demo.model.Tarjeta;
 import es.nextdigital.demo.model.TipoTarjeta;
 import es.nextdigital.demo.repositorio.TarjetaRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 
 @Service
@@ -22,8 +25,8 @@ public class TarjetaServicioImpl implements TarjetaServicio {
     private final BancoServicio bancoServicio;
 
     @Override
-    public float sacarDinero(final String numeroTarjeta, final float cantidad, final String bancoCajero) {
-        final Optional<Tarjeta> tarjetaOptional = tarjetaRepository.findById(numeroTarjeta);
+    public float sacarDinero(final String numeroTarjeta, int pin, final float cantidad, final String bancoCajero) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findByNumeroAndPinEncriptado(numeroTarjeta, this.encriptarPin(pin));
 
         if (tarjetaOptional.isPresent()) {
             final Tarjeta tarjeta = tarjetaOptional.get();
@@ -61,8 +64,8 @@ public class TarjetaServicioImpl implements TarjetaServicio {
     }
 
     @Override
-    public void ingresarDinero(final String numeroTarjeta, final float cantidad, final String bancoCajero) {
-        final Optional<Tarjeta> tarjetaOptional = tarjetaRepository.findById(numeroTarjeta);
+    public void ingresarDinero(final String numeroTarjeta, int pin, final float cantidad, final String bancoCajero) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findByNumeroAndPinEncriptado(numeroTarjeta, this.encriptarPin(pin));
 
         if (tarjetaOptional.isPresent()) {
             final Tarjeta tarjeta = tarjetaOptional.get();
@@ -79,4 +82,65 @@ public class TarjetaServicioImpl implements TarjetaServicio {
             }
         }
     }
+
+    @Transactional
+    @Override
+    public void activarTarjeta(final String numeroTarjeta, final int pin) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findById(numeroTarjeta);
+        if (tarjetaOptional.isPresent()) {
+            final Tarjeta tarjeta = tarjetaOptional.get();
+            if (tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta ya está activada");
+            }
+
+            tarjeta.setActivada(true);
+            tarjeta.setPinEncriptado(this.encriptarPin(pin));
+
+            tarjetaRepository.save(tarjeta);
+        } else {
+            throw new NotFoundException("Tarjeta no encontrada");
+        }
+    }
+
+    @Transactional
+    @Override
+    public void cambiarPin(final String numeroTarjeta, final int pin, final int nuevoPin) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findByNumeroAndPinEncriptado(numeroTarjeta, this.encriptarPin(pin));
+        if (tarjetaOptional.isPresent()) {
+            final Tarjeta tarjeta = tarjetaOptional.get();
+            if (!tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta no está activada");
+            }
+
+            final String nuevoPinEncriptado = this.encriptarPin(nuevoPin);
+            if (tarjeta.getPinEncriptado().equals(nuevoPinEncriptado)) {
+                throw new ForbiddenOperationException("No se puede cambiar al mismo pin");
+            }
+
+            tarjeta.setPinEncriptado(nuevoPinEncriptado);
+            tarjetaRepository.save(tarjeta);
+        } else {
+            throw new NotFoundException("Tarjeta no encontrada");
+        }
+    }
+
+   private String encriptarPin(int pin){
+       // Por ser un "examen" para encriptar simplemente hasheamos el pin. Obviamente no es la encriptacion ideal.
+       // Habria que utilizar algun tipo de clave privada y algun algoritmo complejo de encriptacion.
+       try {
+           MessageDigest digest = MessageDigest.getInstance("SHA-256");
+           byte[] hash = digest.digest(Integer.toString(pin).getBytes());
+
+           StringBuilder hexString = new StringBuilder();
+           for (byte b : hash) {
+               String hex = Integer.toHexString(0xff & b);
+               if (hex.length() == 1) hexString.append('0');
+               hexString.append(hex);
+           }
+           return hexString.toString();
+
+       } catch (NoSuchAlgorithmException e) {
+           throw new RuntimeException("Error al generar hash SHA-256", e);
+       }
+   }
 }

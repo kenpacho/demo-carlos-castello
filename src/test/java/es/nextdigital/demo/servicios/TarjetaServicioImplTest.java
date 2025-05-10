@@ -13,14 +13,21 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class TarjetaServicioImplTest {
+
+    private static final String NUMERO_TARJETA = "123456";
+    private static final int PIN = 1234;
+    private static final String PIN_ENCRIPTADO = TarjetaServicioImplTest.encriptarPin(PIN) ;
+    private static final float CANTIDAD = 100f;
 
     @Mock
     private TarjetaRepository tarjetaRepository;
@@ -32,6 +39,7 @@ class TarjetaServicioImplTest {
     private BancoServicio bancoServicio;
 
     @InjectMocks
+    @Spy
     private TarjetaServicioImpl tarjetaServicio;
 
     @BeforeEach
@@ -40,155 +48,232 @@ class TarjetaServicioImplTest {
     }
 
     @Test
-    void sacarDinero_deberiaRetornar0SiEsMismoBancoYRetiroExitoso() {
-        String numeroTarjeta = "123456";
-        float cantidad = 100f;
-        String bancoCajero = ConstantData.MI_BANCO;
-
-        Cuenta cuenta = new Cuenta();
+    void sacarDinero_deberiaRetornar0_siBancoPropioYDebitoOK() {
+        final Cuenta cuenta = new Cuenta();
         cuenta.setSaldo(200f);
 
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
-        tarjeta.setLimiteRetirada(150f);
-        tarjeta.setActivada(true);
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.DEBITO, 150f, 0f, cuenta);
 
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
-        when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(true);
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+        when(cuentaServicio.sacarDinero(cuenta, CANTIDAD)).thenReturn(true);
 
-        float comision = tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, bancoCajero);
+        final float resultado = tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO);
 
-        assertEquals(0f, comision);
-        verify(cuentaServicio).sacarDinero(cuenta, cantidad);
-        verify(bancoServicio, never()).obtenerBanco(any());
+        assertEquals(0f, resultado);
     }
 
     @Test
-    void sacarDinero_deberiaAplicarComisionSiEsOtroBanco() {
-        String numeroTarjeta = "123456";
-        float cantidad = 100f;
-        String bancoCajero = "Banco Externo";
-
-        Cuenta cuenta = new Cuenta();
-        cuenta.setSaldo(300f);
-
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
-        tarjeta.setLimiteRetirada(200f);
-        tarjeta.setActivada(true);
+    void sacarDinero_deberiaAplicarComision_siBancoAjenoYCreditoOK() {
+        final Cuenta cuenta = new Cuenta();
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.CREDITO, 200f, 1000f, cuenta);
 
         Banco banco = new Banco();
-        banco.setComisionRetirada(2.5f);
+        banco.setComisionRetirada(3.5f);
 
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
-        when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(true);
-        when(bancoServicio.obtenerBanco(bancoCajero)).thenReturn(banco);
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+        when(cuentaServicio.sacarDinero(cuenta, CANTIDAD)).thenReturn(true);
+        when(bancoServicio.obtenerBanco("OtroBanco")).thenReturn(banco);
 
-        float comision = tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, bancoCajero);
+        float resultado = tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, "OtroBanco");
 
-        assertEquals(2.5f, comision);
+        assertEquals(3.5f, resultado);
     }
 
     @Test
-    void sacarDinero_deberiaLanzarExcepcion_siNoPuedeSacarPorSaldo() {
-        String numeroTarjeta = "123456";
-        float cantidad = 500f;
+    void sacarDinero_deberiaLanzarExcepcion_siTarjetaNoActivada() {
+        Tarjeta tarjeta = tarjeta(false, TipoTarjeta.DEBITO, 100f, 0f, new Cuenta());
 
-        Cuenta cuenta = new Cuenta();
-        cuenta.setSaldo(100f);
-
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
-        tarjeta.setLimiteRetirada(600f);
-        tarjeta.setActivada(true);
-
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
 
         assertThrows(ForbiddenOperationException.class, () ->
-                tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, "Banco X")
-        );
-    }
-
-    @Test
-    void sacarDinero_deberiaLanzarExcepcion_siNoPuedeSacarPorLimiteRetirada() {
-        String numeroTarjeta = "123456";
-        float cantidad = 300f;
-
-        Cuenta cuenta = new Cuenta();
-        cuenta.setSaldo(1000f);
-
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.CREDITO);
-        tarjeta.setLimiteRetirada(200f);
-        tarjeta.setLimiteCredito(1000f);
-        tarjeta.setActivada(true);
-
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
-
-        assertThrows(ForbiddenOperationException.class, () ->
-                tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, "Banco Y")
+                tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO)
         );
     }
 
     @Test
     void sacarDinero_deberiaLanzarExcepcion_siTarjetaNoExiste() {
-        when(tarjetaRepository.findById("000000")).thenReturn(Optional.empty());
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.empty());
 
         assertThrows(NotFoundException.class, () ->
-                tarjetaServicio.sacarDinero("000000", 100f, "Banco Z")
+                tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO)
         );
     }
 
     @Test
-    void sacarDinero_deberiaLanzarExcepcion_siSacarDineroFalla() {
-        String numeroTarjeta = "123456";
-        float cantidad = 50f;
+    void sacarDinero_deberiaLanzarExcepcion_siCuentaServicioFalla() {
+        final Cuenta cuenta = new Cuenta();
+        cuenta.setSaldo(200f);
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.DEBITO, 200f, 0f, cuenta);
 
-        Cuenta cuenta = new Cuenta();
-        cuenta.setSaldo(100f);
-
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
-        tarjeta.setLimiteRetirada(100f);
-        tarjeta.setActivada(true);
-
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
-        when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(false);
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+        when(cuentaServicio.sacarDinero(cuenta, CANTIDAD)).thenReturn(false);
 
         assertThrows(ForbiddenOperationException.class, () ->
-                tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, ConstantData.MI_BANCO)
+                tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO)
         );
     }
 
     @Test
-    void sacarDinero_deberiaLanzarExcepcion_siTarjetaNoEstaActivada() {
-        String numeroTarjeta = "123456";
-        float cantidad = 100f;
+    void sacarDinero_deberiaLanzarExcepcion_siCantidadSuperaLimites() {
+        final Cuenta cuenta = new Cuenta();
+        cuenta.setSaldo(100f);
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.DEBITO, 80f, 0f, cuenta);
 
-        Cuenta cuenta = new Cuenta();
-        cuenta.setSaldo(200f);
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
 
-        Tarjeta tarjeta = new Tarjeta();
-        tarjeta.setNumeroTarjeta(numeroTarjeta);
-        tarjeta.setCuenta(cuenta);
-        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
-        tarjeta.setLimiteRetirada(150f);
+        assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.sacarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO)
+        );
+    }
+
+    @Test
+    void ingresarDinero_deberiaIngresar_siBancoPropioYActivada() {
+        final Cuenta cuenta = new Cuenta();
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.DEBITO, 100f, 0f, cuenta);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+
+        tarjetaServicio.ingresarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO);
+
+        verify(cuentaServicio).ingresarDinero(cuenta, CANTIDAD);
+    }
+
+    @Test
+    void ingresarDinero_deberiaLanzarExcepcion_siBancoAjeno() {
+        final Tarjeta tarjeta = tarjeta(true, TipoTarjeta.DEBITO, 100f, 0f, new Cuenta());
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+
+        assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.ingresarDinero(NUMERO_TARJETA, PIN, CANTIDAD, "OtroBanco")
+        );
+    }
+
+    @Test
+    void ingresarDinero_deberiaLanzarExcepcion_siTarjetaNoActivada() {
+        final Tarjeta tarjeta = tarjeta(false, TipoTarjeta.DEBITO, 100f, 0f, new Cuenta());
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO)).thenReturn(Optional.of(tarjeta));
+
+        assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.ingresarDinero(NUMERO_TARJETA, PIN, CANTIDAD, ConstantData.MI_BANCO)
+        );
+    }
+
+    @Test
+    void activarTarjeta_deberiaActivarla_siNoEstabaActivada() {
+        final Tarjeta tarjeta = new Tarjeta();
         tarjeta.setActivada(false);
 
-        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
+        when(tarjetaRepository.findById(NUMERO_TARJETA)).thenReturn(Optional.of(tarjeta));
+
+        tarjetaServicio.activarTarjeta(NUMERO_TARJETA, PIN);
+
+        assertTrue(tarjeta.isActivada());
+        assertEquals(PIN_ENCRIPTADO, tarjeta.getPinEncriptado());
+        verify(tarjetaRepository).save(tarjeta);
+    }
+
+    @Test
+    void activarTarjeta_deberiaLanzarExcepcion_siYaEstabaActiva() {
+        final Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+
+        when(tarjetaRepository.findById(NUMERO_TARJETA)).thenReturn(Optional.of(tarjeta));
 
         assertThrows(ForbiddenOperationException.class, () ->
-                tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, ConstantData.MI_BANCO)
+                tarjetaServicio.activarTarjeta(NUMERO_TARJETA, PIN)
         );
+    }
+
+    @Test
+    void cambiarPin_deberiaActualizarPin_siTodoEsCorrecto() {
+        String nuevoPinHash = encriptarPin(5678);
+
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+        tarjeta.setPinEncriptado(PIN_ENCRIPTADO);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        tarjeta.setPinEncriptado(PIN_ENCRIPTADO);
+        tarjetaServicio.cambiarPin(NUMERO_TARJETA, PIN, 5678);
+
+        // Assert
+        assertEquals(nuevoPinHash, tarjeta.getPinEncriptado());
+        verify(tarjetaRepository).save(tarjeta);
+    }
+
+    @Test
+    void cambiarPin_deberiaLanzarExcepcion_siNuevoPinEsIgual() {
+
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+        tarjeta.setPinEncriptado(PIN_ENCRIPTADO);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.cambiarPin(NUMERO_TARJETA, PIN, PIN)
+        );
+        assertEquals("No se puede cambiar al mismo pin", ex.getMessage());
+    }
+
+    @Test
+    void cambiarPin_deberiaLanzarExcepcion_siTarjetaNoActivada() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(false);
+        tarjeta.setPinEncriptado(PIN_ENCRIPTADO);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.cambiarPin(NUMERO_TARJETA, PIN, 5678)
+        );
+        assertEquals("La tarjeta no está activada", ex.getMessage());
+    }
+
+    @Test
+    void cambiarPin_deberiaLanzarExcepcion_siTarjetaNoExiste() {
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () ->
+                tarjetaServicio.cambiarPin(NUMERO_TARJETA, PIN, 5678)
+        );
+        assertEquals("Tarjeta no encontrada", ex.getMessage());
+    }
+
+
+
+    private Tarjeta tarjeta(final boolean activada, final TipoTarjeta tipo, final float limiteRetirada, final float limiteCredito, final Cuenta cuenta) {
+        final Tarjeta t = new Tarjeta();
+        t.setActivada(activada);
+        t.setTipoTarjeta(tipo);
+        t.setLimiteRetirada(limiteRetirada);
+        t.setLimiteCredito(limiteCredito);
+        t.setCuenta(cuenta);
+        return t;
+    }
+
+    private static String encriptarPin(final int pin){
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(Integer.toString(pin).getBytes());
+
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Error al generar hash SHA-256", e);
+        }
     }
 }

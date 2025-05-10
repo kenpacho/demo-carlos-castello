@@ -14,7 +14,7 @@ public class Tarjeta {
     private int mesCaducidad;
     private int anoCaducidad;
     private int cvv;
-    private int pin;
+    private String pinEncriptado;
     private boolean activada;
     private float limiteRetirada;
     private float limiteCredito;
