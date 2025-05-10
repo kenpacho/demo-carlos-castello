@@ -7,7 +7,11 @@ import java.util.List;
 
 public interface CuentaServicio {
 
-    List<Movimiento> listarMovimientos(Integer cuentaId);
+    List<Movimiento> listarMovimientos(String numeroCuenta);
 
     boolean sacarDinero(Cuenta cuenta, float cantidad);
+
+    void ingresarDinero(Cuenta cuenta, float cantidad);
+
+    void realizarTransferencia(String numeroCuentaOrigen, String ibanDestino, float cantidad);
 }

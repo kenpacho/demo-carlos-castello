@@ -22,12 +22,15 @@ public class TarjetaServicioImpl implements TarjetaServicio {
     private final BancoServicio bancoServicio;
 
     @Override
-    public float sacarDinero(String numeroTarjeta, float cantidad, String bancoCajero) {
+    public float sacarDinero(final String numeroTarjeta, final float cantidad, final String bancoCajero) {
         final Optional<Tarjeta> tarjetaOptional = tarjetaRepository.findById(numeroTarjeta);
 
         if (tarjetaOptional.isPresent()) {
             final Tarjeta tarjeta = tarjetaOptional.get();
             final Cuenta cuenta = tarjeta.getCuenta();
+            if (!tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta no está activada");
+            }
 
             boolean puedeSacar;
             if (TipoTarjeta.DEBITO == tarjeta.getTipoTarjeta()) {
@@ -54,6 +57,26 @@ public class TarjetaServicioImpl implements TarjetaServicio {
             }
         } else {
             throw new NotFoundException("Tarjeta no encontrada");
+        }
+    }
+
+    @Override
+    public void ingresarDinero(final String numeroTarjeta, final float cantidad, final String bancoCajero) {
+        final Optional<Tarjeta> tarjetaOptional = tarjetaRepository.findById(numeroTarjeta);
+
+        if (tarjetaOptional.isPresent()) {
+            final Tarjeta tarjeta = tarjetaOptional.get();
+            final Cuenta cuenta = tarjeta.getCuenta();
+            if (!tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta no está activada");
+            }
+
+            boolean puedeIngresar = ConstantData.MI_BANCO.equals(bancoCajero);
+            if (puedeIngresar) {
+                cuentaServicio.ingresarDinero(cuenta, cantidad);
+            } else {
+                throw new ForbiddenOperationException("No se puede ingresar dinero desde un cajero de otro banco");
+            }
         }
     }
 }

@@ -12,5 +12,4 @@ public class Banco {
     private Integer bancoId;
     private String nombre;
     private float comisionRetirada;
-    private float comisionTransferencia;
 }

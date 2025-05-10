@@ -41,7 +41,6 @@ class TarjetaServicioImplTest {
 
     @Test
     void sacarDinero_deberiaRetornar0SiEsMismoBancoYRetiroExitoso() {
-        // Arrange
         String numeroTarjeta = "123456";
         float cantidad = 100f;
         String bancoCajero = ConstantData.MI_BANCO;
@@ -54,14 +53,13 @@ class TarjetaServicioImplTest {
         tarjeta.setCuenta(cuenta);
         tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
         tarjeta.setLimiteRetirada(150f);
+        tarjeta.setActivada(true);
 
         when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
         when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(true);
 
-        // Act
         float comision = tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, bancoCajero);
 
-        // Assert
         assertEquals(0f, comision);
         verify(cuentaServicio).sacarDinero(cuenta, cantidad);
         verify(bancoServicio, never()).obtenerBanco(any());
@@ -69,7 +67,6 @@ class TarjetaServicioImplTest {
 
     @Test
     void sacarDinero_deberiaAplicarComisionSiEsOtroBanco() {
-        // Arrange
         String numeroTarjeta = "123456";
         float cantidad = 100f;
         String bancoCajero = "Banco Externo";
@@ -82,6 +79,7 @@ class TarjetaServicioImplTest {
         tarjeta.setCuenta(cuenta);
         tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
         tarjeta.setLimiteRetirada(200f);
+        tarjeta.setActivada(true);
 
         Banco banco = new Banco();
         banco.setComisionRetirada(2.5f);
@@ -90,16 +88,13 @@ class TarjetaServicioImplTest {
         when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(true);
         when(bancoServicio.obtenerBanco(bancoCajero)).thenReturn(banco);
 
-        // Act
         float comision = tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, bancoCajero);
 
-        // Assert
         assertEquals(2.5f, comision);
     }
 
     @Test
     void sacarDinero_deberiaLanzarExcepcion_siNoPuedeSacarPorSaldo() {
-        // Arrange
         String numeroTarjeta = "123456";
         float cantidad = 500f;
 
@@ -111,10 +106,10 @@ class TarjetaServicioImplTest {
         tarjeta.setCuenta(cuenta);
         tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
         tarjeta.setLimiteRetirada(600f);
+        tarjeta.setActivada(true);
 
         when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
 
-        // Act & Assert
         assertThrows(ForbiddenOperationException.class, () ->
                 tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, "Banco X")
         );
@@ -122,7 +117,6 @@ class TarjetaServicioImplTest {
 
     @Test
     void sacarDinero_deberiaLanzarExcepcion_siNoPuedeSacarPorLimiteRetirada() {
-        // Arrange
         String numeroTarjeta = "123456";
         float cantidad = 300f;
 
@@ -133,12 +127,12 @@ class TarjetaServicioImplTest {
         tarjeta.setNumeroTarjeta(numeroTarjeta);
         tarjeta.setCuenta(cuenta);
         tarjeta.setTipoTarjeta(TipoTarjeta.CREDITO);
-        tarjeta.setLimiteRetirada(200f); // menor que cantidad
+        tarjeta.setLimiteRetirada(200f);
         tarjeta.setLimiteCredito(1000f);
+        tarjeta.setActivada(true);
 
         when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
 
-        // Act & Assert
         assertThrows(ForbiddenOperationException.class, () ->
                 tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, "Banco Y")
         );
@@ -146,10 +140,8 @@ class TarjetaServicioImplTest {
 
     @Test
     void sacarDinero_deberiaLanzarExcepcion_siTarjetaNoExiste() {
-        // Arrange
         when(tarjetaRepository.findById("000000")).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(NotFoundException.class, () ->
                 tarjetaServicio.sacarDinero("000000", 100f, "Banco Z")
         );
@@ -157,7 +149,6 @@ class TarjetaServicioImplTest {
 
     @Test
     void sacarDinero_deberiaLanzarExcepcion_siSacarDineroFalla() {
-        // Arrange
         String numeroTarjeta = "123456";
         float cantidad = 50f;
 
@@ -169,11 +160,33 @@ class TarjetaServicioImplTest {
         tarjeta.setCuenta(cuenta);
         tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
         tarjeta.setLimiteRetirada(100f);
+        tarjeta.setActivada(true);
 
         when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
         when(cuentaServicio.sacarDinero(cuenta, cantidad)).thenReturn(false);
 
-        // Act & Assert
+        assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, ConstantData.MI_BANCO)
+        );
+    }
+
+    @Test
+    void sacarDinero_deberiaLanzarExcepcion_siTarjetaNoEstaActivada() {
+        String numeroTarjeta = "123456";
+        float cantidad = 100f;
+
+        Cuenta cuenta = new Cuenta();
+        cuenta.setSaldo(200f);
+
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setNumeroTarjeta(numeroTarjeta);
+        tarjeta.setCuenta(cuenta);
+        tarjeta.setTipoTarjeta(TipoTarjeta.DEBITO);
+        tarjeta.setLimiteRetirada(150f);
+        tarjeta.setActivada(false);
+
+        when(tarjetaRepository.findById(numeroTarjeta)).thenReturn(Optional.of(tarjeta));
+
         assertThrows(ForbiddenOperationException.class, () ->
                 tarjetaServicio.sacarDinero(numeroTarjeta, cantidad, ConstantData.MI_BANCO)
         );
