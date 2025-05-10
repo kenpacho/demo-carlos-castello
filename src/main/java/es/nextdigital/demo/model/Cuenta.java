@@ -11,7 +11,8 @@ import java.util.List;
 public class Cuenta {
 
     @Id
-    private int cuentaId;
+    private Integer cuentaId;
     private List<Tarjeta> tarjetas;
     private List<Movimiento> movimientos;
+    private float saldo;
 }

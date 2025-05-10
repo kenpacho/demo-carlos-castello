@@ -2,6 +2,7 @@ package es.nextdigital.demo.model;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToOne;
 import lombok.Data;
 
 @Data
@@ -9,12 +10,16 @@ import lombok.Data;
 public class Tarjeta {
 
     @Id
-    private String codigoTarjeta;
+    private String numeroTarjeta;
     private int mesCaducidad;
     private int anoCaducidad;
     private int cvv;
     private int pin;
     private boolean activada;
-    private int limiteRetirada;
+    private float limiteRetirada;
+    private float limiteCredito;
     private TipoTarjeta tipoTarjeta;
+
+    @ManyToOne
+    private Cuenta cuenta;
 }

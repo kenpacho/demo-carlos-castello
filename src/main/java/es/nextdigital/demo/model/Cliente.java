@@ -11,7 +11,7 @@ import java.util.List;
 public class Cliente {
 
     @Id
-    private int clienteId;
+    private Integer clienteId;
     private String nombre;
     private List<Cuenta> cuentas;
 

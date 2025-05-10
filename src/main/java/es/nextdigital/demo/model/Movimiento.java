@@ -11,7 +11,7 @@ import java.util.Date;
 public class Movimiento {
 
     @Id
-    private int movimientoId;
+    private Integer movimientoId;
     private Date fechaMovimiento;
     private TipoMovimiento tipoMovimiento;
     private float importe;
