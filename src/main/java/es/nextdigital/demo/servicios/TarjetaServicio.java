@@ -9,4 +9,8 @@ public interface TarjetaServicio {
     void activarTarjeta(String numeroTarjeta, int pin);
 
     void cambiarPin(String numeroTarjeta, int pin, int nuevoPin);
+
+    float consultarConfiguracion(String numeroTarjeta, int pin);
+
+    void modificarConfiguracion(String numeroTarjeta, int pin, float limiteRetirada);
 }

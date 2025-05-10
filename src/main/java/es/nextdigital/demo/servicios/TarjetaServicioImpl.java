@@ -20,6 +20,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TarjetaServicioImpl implements TarjetaServicio {
 
+    private static final float MIN_LIMITE_RETIRADA = 500;
+    private static final float MAX_LIMITE_RETIRADA = 6000;
+
     private final TarjetaRepository tarjetaRepository;
     private final CuentaServicio cuentaServicio;
     private final BancoServicio bancoServicio;
@@ -124,7 +127,42 @@ public class TarjetaServicioImpl implements TarjetaServicio {
         }
     }
 
-   private String encriptarPin(int pin){
+    @Override
+    public float consultarConfiguracion(String numeroTarjeta, int pin) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findByNumeroAndPinEncriptado(numeroTarjeta, this.encriptarPin(pin));
+        if (tarjetaOptional.isPresent()) {
+            final Tarjeta tarjeta = tarjetaOptional.get();
+            if (!tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta no está activada");
+            }
+
+            return tarjeta.getLimiteRetirada();
+        } else {
+            throw new NotFoundException("Tarjeta no encontrada");
+        }
+    }
+
+    @Override
+    public void modificarConfiguracion(String numeroTarjeta, int pin, float limiteRetirada) {
+        final Optional<Tarjeta> tarjetaOptional = this.tarjetaRepository.findByNumeroAndPinEncriptado(numeroTarjeta, this.encriptarPin(pin));
+        if (tarjetaOptional.isPresent()) {
+            final Tarjeta tarjeta = tarjetaOptional.get();
+            if (!tarjeta.isActivada()) {
+                throw new ForbiddenOperationException("La tarjeta no está activada");
+            }
+
+            if (limiteRetirada >= MIN_LIMITE_RETIRADA && limiteRetirada <= MAX_LIMITE_RETIRADA) {
+                tarjeta.setLimiteRetirada(limiteRetirada);
+                tarjetaRepository.save(tarjeta);
+            } else {
+                throw new ForbiddenOperationException("El nuevo limite de retirada esta fuera de los valores permitidos");
+            }
+        } else {
+            throw new NotFoundException("Tarjeta no encontrada");
+        }
+    }
+
+    private String encriptarPin(int pin){
        // Por ser un "examen" para encriptar simplemente hasheamos el pin. Obviamente no es la encriptacion ideal.
        // Habria que utilizar algun tipo de clave privada y algun algoritmo complejo de encriptacion.
        try {

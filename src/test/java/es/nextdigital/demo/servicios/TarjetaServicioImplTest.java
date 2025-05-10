@@ -247,6 +247,114 @@ class TarjetaServicioImplTest {
         assertEquals("Tarjeta no encontrada", ex.getMessage());
     }
 
+    @Test
+    void consultarConfiguracion_deberiaDevolverLimiteRetirada_siTarjetaActiva() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+        tarjeta.setLimiteRetirada(300f);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        float resultado = tarjetaServicio.consultarConfiguracion(NUMERO_TARJETA, PIN);
+
+        assertEquals(300f, resultado);
+    }
+
+    @Test
+    void consultarConfiguracion_deberiaLanzarExcepcion_siTarjetaNoActivada() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(false);
+        tarjeta.setLimiteRetirada(300f);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.consultarConfiguracion(NUMERO_TARJETA, PIN)
+        );
+        assertEquals("La tarjeta no está activada", ex.getMessage());
+    }
+
+    @Test
+    void consultarConfiguracion_deberiaLanzarExcepcion_siTarjetaNoExiste() {
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () ->
+                tarjetaServicio.consultarConfiguracion(NUMERO_TARJETA, PIN)
+        );
+        assertEquals("Tarjeta no encontrada", ex.getMessage());
+    }
+
+    @Test
+    void modificarConfiguracion_deberiaGuardarNuevoLimite_siTodoEsValido() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+        tarjeta.setLimiteRetirada(250f);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        tarjetaServicio.modificarConfiguracion(NUMERO_TARJETA, PIN, 900f);
+
+        assertEquals(900f, tarjeta.getLimiteRetirada());
+        verify(tarjetaRepository).save(tarjeta);
+    }
+
+    @Test
+    void modificarConfiguracion_deberiaLanzarExcepcion_siTarjetaNoActivada() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(false);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.modificarConfiguracion(NUMERO_TARJETA, PIN, 300f)
+        );
+        assertEquals("La tarjeta no está activada", ex.getMessage());
+    }
+
+    @Test
+    void modificarConfiguracion_deberiaLanzarExcepcion_siLimiteInvalidoMinimo() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.modificarConfiguracion(NUMERO_TARJETA, PIN, 20f)
+        );
+        assertEquals("El nuevo limite de retirada esta fuera de los valores permitidos", ex.getMessage());
+    }
+
+
+    @Test
+    void modificarConfiguracion_deberiaLanzarExcepcion_siLimiteInvalidoMaximo() {
+        Tarjeta tarjeta = new Tarjeta();
+        tarjeta.setActivada(true);
+
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.of(tarjeta));
+
+        ForbiddenOperationException ex = assertThrows(ForbiddenOperationException.class, () ->
+                tarjetaServicio.modificarConfiguracion(NUMERO_TARJETA, PIN, 10000f)
+        );
+        assertEquals("El nuevo limite de retirada esta fuera de los valores permitidos", ex.getMessage());
+    }
+
+    @Test
+    void modificarConfiguracion_deberiaLanzarExcepcion_siTarjetaNoExiste() {
+        when(tarjetaRepository.findByNumeroAndPinEncriptado(NUMERO_TARJETA, PIN_ENCRIPTADO))
+                .thenReturn(Optional.empty());
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () ->
+                tarjetaServicio.modificarConfiguracion(NUMERO_TARJETA, PIN, 700f)
+        );
+        assertEquals("Tarjeta no encontrada", ex.getMessage());
+    }
 
 
     private Tarjeta tarjeta(final boolean activada, final TipoTarjeta tipo, final float limiteRetirada, final float limiteCredito, final Cuenta cuenta) {
